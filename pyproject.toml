@@ -4,8 +4,4 @@ version = "0.1.0"
 description = "MCP Servers Manager"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = [
-    "pyqt6>=6.9.0",
- "pyside6>=6.9.0",
- "ruff>=0.11.5",
-]
+dependencies = ["pyside6>=6.9.0", "ruff>=0.11.5"]

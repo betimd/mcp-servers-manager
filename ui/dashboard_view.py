@@ -90,75 +90,78 @@ class DashboardView(QWidget):
 
     def initialize_dummy_data(self):
         """Initialize with some dummy data if no servers exist"""
+
         # Only add dummy data if no servers exist
-        if not self.server_controller.get_all_servers():
-            # Create some sample servers
-            neon_server = self.server_controller.create_server(
-                name="Neon MCP Server",
-                url="https://mcp.neon.tech/sse",
-                icon_type="green_dot",
-                subtitle="2 sources",
-            )
+        if self.server_controller.get_all_servers():
+            return
 
-            local_server = self.server_controller.create_server(
-                name="Local Development MCP",
-                url="http://localhost:3000/sse",
-                icon_type="blue_dot",
-                subtitle="VS Code",
-            )
+        # Create some sample servers
+        neon_server = self.server_controller.create_server(
+            name="Neon MCP Server",
+            url="https://mcp.neon.tech/sse",
+            icon_type="green_dot",
+            subtitle="2 sources",
+        )
 
-            openai_server = self.server_controller.create_server(
-                name="OpenAI Tools Server",
-                url="https://mcp.openai.com/sse",
-                icon_type="purple_dot",
-                subtitle="3 sources",
-            )
+        local_server = self.server_controller.create_server(
+            name="Local Development MCP",
+            url="http://localhost:3000/sse",
+            icon_type="blue_dot",
+            subtitle="VS Code",
+        )
 
-            custom_server = self.server_controller.create_server(
-                name="Custom MCP Server",
-                url="https://custom-mcp.example.com/sse",
-                icon_type="red_dot",
-                subtitle="Claude Desktop",
-            )
+        openai_server = self.server_controller.create_server(
+            name="OpenAI Tools Server",
+            url="https://mcp.openai.com/sse",
+            icon_type="purple_dot",
+            subtitle="3 sources",
+        )
 
-            # Add some tools to the servers
-            self.server_controller.add_tool_to_server(neon_server.id, "listProjects")
-            self.server_controller.add_tool_to_server(neon_server.id, "createDatabase")
-            self.server_controller.add_tool_to_server(neon_server.id, "runQuery")
+        custom_server = self.server_controller.create_server(
+            name="Custom MCP Server",
+            url="https://custom-mcp.example.com/sse",
+            icon_type="red_dot",
+            subtitle="Claude Desktop",
+        )
 
-            # Create some sample sources
-            claude_source = self.source_controller.create_source(
-                name="Claude Desktop",
-                path="/Users/user/.config/claude-desktop/mcp.json",
-                icon_type="purple_dot",
-            )
+        # Add some tools to the servers
+        self.server_controller.add_tool_to_server(neon_server.id, "listProjects")
+        self.server_controller.add_tool_to_server(neon_server.id, "createDatabase")
+        self.server_controller.add_tool_to_server(neon_server.id, "runQuery")
 
-            vscode_source = self.source_controller.create_source(
-                name="VS Code",
-                path="/Users/user/.vscode/extensions/anthropic.claude-1.0.0/mcp.json",
-                icon_type="blue_dot",
-            )
+        # Create some sample sources
+        claude_source = self.source_controller.create_source(
+            name="Claude Desktop",
+            path="/Users/user/.config/claude-desktop/mcp.json",
+            icon_type="purple_dot",
+        )
 
-            cursor_source = self.source_controller.create_source(
-                name="Cursor",
-                path="/Applications/Cursor.app/Contents/Resources/mcp.json",
-                icon_type="green_dot",
-            )
+        vscode_source = self.source_controller.create_source(
+            name="VS Code",
+            path="/Users/user/.vscode/extensions/anthropic.claude-1.0.0/mcp.json",
+            icon_type="blue_dot",
+        )
 
-            windsurf_source = self.source_controller.create_source(
-                name="Windsurf",
-                path="/Users/user/.windsurf/mcp.json",
-                icon_type="orange_dot",
-            )
+        cursor_source = self.source_controller.create_source(
+            name="Cursor",
+            path="/Applications/Cursor.app/Contents/Resources/mcp.json",
+            icon_type="green_dot",
+        )
 
-            # Connect sources to servers
-            self.server_controller.add_source_to_server(neon_server.id, claude_source)
-            self.server_controller.add_source_to_server(neon_server.id, cursor_source)
-            self.server_controller.add_source_to_server(local_server.id, vscode_source)
-            self.server_controller.add_source_to_server(custom_server.id, claude_source)
+        windsurf_source = self.source_controller.create_source(
+            name="Windsurf",
+            path="/Users/user/.windsurf/mcp.json",
+            icon_type="orange_dot",
+        )
 
-            # Select the Neon server by default
-            self.server_controller.select_server(neon_server.id)
+        # Connect sources to servers
+        self.server_controller.add_source_to_server(neon_server.id, claude_source)
+        self.server_controller.add_source_to_server(neon_server.id, cursor_source)
+        self.server_controller.add_source_to_server(local_server.id, vscode_source)
+        self.server_controller.add_source_to_server(custom_server.id, claude_source)
+
+        # Select the Neon server by default
+        self.server_controller.select_server(neon_server.id)
 
     def load_servers(self):
         """Load servers from the controller into the list widget"""
