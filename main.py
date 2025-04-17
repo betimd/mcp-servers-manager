@@ -123,9 +123,6 @@ def system_initiation_check():
         sys.exit("Failed to create data source file. Please check your installation.")
         return
 
-    mcp_servers = get_mcp_servers(SERVER_SOURCES_FILE_PATH)
-    print("MCP servers loaded successfully.", mcp_servers)
-
 
 def main():
     """Main application entry point"""
@@ -141,4 +138,8 @@ def main():
 
 if __name__ == "__main__":
     system_initiation_check()
+
+    mcp_servers = get_mcp_servers(f"./data/{MCP_SERVER_SOURCES_FILE_NAME}")
+    print("MCP servers loaded successfully.", mcp_servers)
+
     main()
