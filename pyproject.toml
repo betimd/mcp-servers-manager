@@ -5,3 +5,13 @@ description = "MCP Servers Manager"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = ["pyside6>=6.9.0", "ruff>=0.11.5"]
+
+# ---------------------------------------------------------------------------
+# Tool‑specific configuration
+# ---------------------------------------------------------------------------
+
+[tool.flake8]
+max-line-length = 150
+
+#[tool.ruff]
+#line-length = 150  # Uncomment if you want Ruff to use the same length
