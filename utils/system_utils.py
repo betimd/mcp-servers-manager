@@ -20,6 +20,8 @@ import os
 import re
 from typing import Dict, List
 
+from models import SERVER_SOURCE, SERVER_TYPE, Server
+
 # Regular expression used as a last-resort fallback for detecting HTTP(S)
 # endpoints inside the configuration files.
 _URL_RE = re.compile(r"https?://[^\s'\"`]+", re.IGNORECASE)
@@ -50,27 +52,8 @@ def _extract_urls_from_json(data):  # noqa: D401
 # ---------------------------------------------------------------------------
 
 
-def get_mcp_servers_from_claude_desktop(config_path: str) -> List[Dict[str, str]]:
-    """Return a list of ``{"name": .., "url": ..}`` dictionaries extracted from
-    Anthropic's *Claude Desktop* configuration file.
-
-    Claude currently stores a "servers" list in a JSON file located in the
-    user's *Application Support* directory.  The structure we have seen so far
-    is::
-
-        {
-            "mcp": {
-                "servers": [
-                    {"name": "Neon", "url": "https://mcp.neon.tech/sse"},
-                    ...
-                ]
-            }
-        }
-
-    We intentionally keep the parser very defensive because the exact keys may
-    change in future versions.  If we do not find a dedicated list we scan the
-    whole file for URLs as a fallback.
-    """
+def get_mcp_servers_from_claude_desktop(config_path: str) -> List[Server]:
+    """Return a list of mcp servers from the *Claude Desktop* config file."""
 
     if not os.path.exists(config_path):
         return []
@@ -79,7 +62,6 @@ def get_mcp_servers_from_claude_desktop(config_path: str) -> List[Dict[str, str]
         with open(config_path, "r", encoding="utf-8") as fp:
             data = json.load(fp)
     except Exception as exc:
-        # Failed to parse JSON - fallback to regex scan
         print(f"Warning: Failed to parse Claude Desktop config file: {exc}")
         return []
 
@@ -89,7 +71,22 @@ def get_mcp_servers_from_claude_desktop(config_path: str) -> List[Dict[str, str]
         )
         return []
 
-    servers = data["mcpServers"]
+    mcpServers = data["mcpServers"]
+
+    servers: list[Server] = []
+
+    for name, srv in mcpServers.items():
+        srv_id = name.replace(" ", "_")
+        new_srv: Server = Server(
+            server_type=SERVER_TYPE.LOCAL,
+            server_source=SERVER_SOURCE.CLAUDE_DESKTOP,
+            url="",
+            id=srv_id,
+            name=name,
+            cmd=srv.get("command"),
+            cmd_args=srv.get("args"),
+        )
+        servers.append(new_srv)
 
     return servers
 
@@ -244,21 +241,7 @@ def _scan_file_for_urls(path: str, source_name: str | None = None):
     return servers
 
 
-def _deduplicate(servers: List[Dict[str, str]]):
-    """Remove duplicate URLs while keeping order (first appearance wins)."""
-
-    seen = set()
-    unique: List[Dict[str, str]] = []
-    for srv in servers:
-        url = srv.get("url")
-        if not url or url in seen:
-            continue
-        seen.add(url)
-        unique.append(srv)
-    return unique
-
-
-def get_mcp_servers(mcp_server_sources_file: str) -> List[Dict[str, str]]:  # noqa: D401
+def get_mcp_servers(mcp_server_sources_file: str) -> List[Server]:
     """Read *mcp_server_sources.json* and return **all** referenced servers.
 
     The function does **not** persist anything - it only inspects external
@@ -279,32 +262,24 @@ def get_mcp_servers(mcp_server_sources_file: str) -> List[Dict[str, str]]:  # no
     ):
         return []
 
-    all_servers: List[Dict[str, str]] = []
+    all_servers: List[Server] = []
 
-    # Map from source.id to specialised reader
-    reader_map = {
-        "claude-desktop": get_mcp_servers_from_claude_desktop,
-        "vscode": get_mcp_servers_from_vscode,
-        "cursor": get_mcp_servers_from_cursor,
-        "windsurf": get_mcp_servers_from_windsurf,
-    }
+    all_server_source = sources_payload["sources"]
 
-    for src in sources_payload["sources"]:
-        if not isinstance(src, dict):
+    for server_source in all_server_source:
+        source_id = server_source.get("id", None)
+        if not source_id:
+            print("Warning: Missing source ID.")
             continue
 
-        src_id = src.get("id")
-        src_path = src.get("path")
-        if not src_id or not src_path:
-            continue
+        if source_id == "claude-desktop":
+            claude_desktop_path = server_source.get("path", None)
+            if not claude_desktop_path:
+                print("Warning: Missing path for claude-desktop source.")
+            else:
+                claude_mcp_servers = get_mcp_servers_from_claude_desktop(
+                    claude_desktop_path
+                )
+                all_servers += claude_mcp_servers
 
-        reader = reader_map.get(src_id)
-        if reader is None:
-            # Unknown source - generic scan
-            all_servers.extend(
-                _scan_file_for_urls(src_path, source_name=src.get("name"))
-            )
-        else:
-            all_servers.extend(reader(src_path))
-
-    return _deduplicate(all_servers)
+    return all_servers

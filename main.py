@@ -140,6 +140,8 @@ if __name__ == "__main__":
     system_initiation_check()
 
     mcp_servers = get_mcp_servers(f"./data/{MCP_SERVER_SOURCES_FILE_NAME}")
-    print("MCP servers loaded successfully.", mcp_servers)
+    print("MCP servers loaded successfully.", len(mcp_servers), "servers found.")
+    for server in mcp_servers:
+        print(f"{server.server_source} > {server.name} | {server.server_type}, ")
 
     main()

@@ -1,6 +1,8 @@
 """
-Server data model for the MCP Server Manager
+Server data model for the MCP Server
 """
+
+from .utils import SERVER_SOURCE, SERVER_TYPE
 
 
 class Server:
@@ -8,7 +10,16 @@ class Server:
     Model representing an MCP server configuration
     """
 
-    def __init__(self, id, name, url, icon_type="green_dot", subtitle=""):
+    def __init__(
+        self,
+        id,
+        name,
+        url,
+        server_type=SERVER_TYPE.LOCAL,
+        cmd: str = "",
+        cmd_args: list = None,
+        server_source: SERVER_SOURCE = None,
+    ):
         """
         Initialize a new Server
 
@@ -22,15 +33,12 @@ class Server:
         self.id = id
         self.name = name
         self.url = url
-        self.icon_type = icon_type
-        self.subtitle = subtitle
-        self.sources = []  # List of associated sources
-        self.tools = []  # List of available tools
+        self.server_type = server_type
+        self.cmd = cmd
+        self.cmd_args = cmd_args
+        self.server_source = server_source
 
-    @property
-    def command(self):
-        """Generate the command string for connecting to this server"""
-        return f"npx -y mcp-remote {self.url}"
+    # review this stuff later ====
 
     def add_source(self, source):
         """Add a source to this server"""
