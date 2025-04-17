@@ -6,6 +6,7 @@ from PySide6.QtWidgets import QApplication
 
 from constants import MCP_SERVER_SOURCES_FILE_NAME, SYSTEM_DEFAULTS_FILE_NAME
 from ui.main_window import MCPServerManager
+from utils.system_utils import get_mcp_servers
 
 
 def system_initiation_check():
@@ -117,6 +118,13 @@ def system_initiation_check():
         print("Initial data source file created at ./data/mcp_server_source.json")
     except IOError as exc:
         sys.exit(f"Failed to create data source file: {exc}")
+
+    if not os.path.exists(SERVER_SOURCES_FILE_PATH):
+        sys.exit("Failed to create data source file. Please check your installation.")
+        return
+
+    mcp_servers = get_mcp_servers(SERVER_SOURCES_FILE_PATH)
+    print("MCP servers loaded successfully.", mcp_servers)
 
 
 def main():
