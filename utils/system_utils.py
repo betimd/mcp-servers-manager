@@ -1,55 +1,14 @@
 """Utility helpers for reading different application configuration files and
-collecting all MCP server endpoints referenced inside them.
-
-The public ``get_mcp_servers`` function takes the *mcp_server_sources.json* file
-created during ``system_initiation_check`` and returns **one** combined list of
-servers with duplicates (same URL) removed.
-
-Each supported application (Claude-desktop, VS Code, Cursor, Windsurf) has a
-small specialized reader that knows where within the corresponding JSON / text
-file the server URLs usually live. Even if these heuristics fail for a
-specific future version of an application we still fall back to a generic
-URL-scanner so we will never completely miss a server that is literally
-referenced in the file.
+collecting all MCP servers referenced inside them.
 """
 
 from __future__ import annotations
 
 import json
 import os
-import re
 from typing import Dict, List
 
 from models import SERVER_SOURCE, SERVER_TYPE, Server
-
-# Regular expression used as a last-resort fallback for detecting HTTP(S)
-# endpoints inside the configuration files.
-_URL_RE = re.compile(r"https?://[^\s'\"`]+", re.IGNORECASE)
-
-
-# Helper is intentionally short and returns a generator; we therefore ignore
-# "imperative mood" docstring rule (D401).
-
-
-def _extract_urls_from_json(data):  # noqa: D401
-    """Recursively walk a *loaded* JSON object and yield all string values that
-    look like an HTTP(S) URL.
-    """
-
-    if isinstance(data, dict):
-        for value in data.values():
-            yield from _extract_urls_from_json(value)
-    elif isinstance(data, list):
-        for item in data:
-            yield from _extract_urls_from_json(item)
-    elif isinstance(data, str):
-        if _URL_RE.search(data):
-            yield data
-
-
-# ---------------------------------------------------------------------------
-# Individual source readers
-# ---------------------------------------------------------------------------
 
 
 def get_mcp_servers_from_claude_desktop(config_path: str) -> List[Server]:
@@ -91,154 +50,101 @@ def get_mcp_servers_from_claude_desktop(config_path: str) -> List[Server]:
     return servers
 
 
-def get_mcp_servers_from_vscode(settings_path: str) -> List[Dict[str, str]]:
-    """Parse *VS Code*'s *settings.json* for MCP endpoints.
-
-    The official Anthropic extension stores the URL under
-    ``"claude.mcp.endpoint"``.  Again, we keep the code lenient and fall back
-    to a generic scan when necessary.
+def get_mcp_servers_from_cursor(mcp_json_path: str) -> List[Server]:
+    """Return a *list of Server objects* defined in Cursor's
+    ``~/.cursor/mcp.json`` configuration.
     """
+
+    if not os.path.exists(mcp_json_path):
+        return []
+
+    try:
+        with open(mcp_json_path, "r", encoding="utf-8") as fp:
+            data = json.load(fp)
+    except Exception as exc:
+        print(f"Warning: Failed to parse Cursor config file: {exc}")
+        return []
+
+    # ---------------------------------------------------------------------
+    # Normal decoding path – look for "mcpServers" first.
+    # ---------------------------------------------------------------------
+
+    servers: list[Server] = []
+
+    def _create_server(name: str, spec: dict):  # local helper
+        """Convert a single mcpServers entry into a Server object."""
+
+        srv_id = name.replace(" ", "_")
+
+        if isinstance(spec, dict) and isinstance(spec.get("url"), str):
+            # Remote endpoint
+            return Server(
+                id=srv_id,
+                name=name,
+                url=spec["url"],
+                server_type=SERVER_TYPE.REMOTE,
+                server_source=SERVER_SOURCE.CURSOR,
+            )
+
+        # Fallback – treat as *local* server started via command
+        return Server(
+            id=srv_id,
+            name=name,
+            url="",  # local
+            server_type=SERVER_TYPE.LOCAL,
+            server_source=SERVER_SOURCE.CURSOR,
+            cmd=spec.get("command") if isinstance(spec, dict) else None,
+            cmd_args=spec.get("args") if isinstance(spec, dict) else None,
+        )
+
+    if isinstance(data, dict) and isinstance(data.get("mcpServers"), dict):
+        for name, entry in data["mcpServers"].items():
+            server_obj = _create_server(name, entry)
+            servers.append(server_obj)
+
+    # ------------------------------------------------------------------
+    # Legacy / alternate layout – top‑level "servers" list (older docs)
+    # ------------------------------------------------------------------
+    if not servers and isinstance(data, dict) and isinstance(data.get("servers"), list):
+        for entry in data["servers"]:
+            if not isinstance(entry, dict):
+                continue
+
+            url = entry.get("url")
+            if not url:
+                continue
+
+            name = entry.get("name", url)
+            srv_id = name.replace(" ", "_")
+            servers.append(
+                Server(
+                    id=srv_id,
+                    name=name,
+                    url=url,
+                    server_type=SERVER_TYPE.REMOTE,
+                    server_source=SERVER_SOURCE.CURSOR,
+                )
+            )
+
+    return servers
+
+
+def get_mcp_servers_from_vscode(settings_path: str) -> List[Dict[str, str]]:
+    """Parse *VS Code*'s *settings.json* for MCP Servers."""
 
     if not os.path.exists(settings_path):
         return []
 
-    # VS Code allows // comments in settings.json.  We therefore read the file
-    # as *text*, strip line comments and attempt to decode afterwards.
-    try:
-        with open(settings_path, "r", encoding="utf-8") as fp:
-            raw_content = fp.readlines()
-
-        # Remove simple // comments. We ignore edge-cases such as URLs that
-        # themselves contain "//" because it is extremely unlikely to appear
-        # in a VS Code setting string value.
-        cleaned_lines = []
-        for line in raw_content:
-            # Preserve part before // if it is not inside a string literal.
-            if "//" in line:
-                quote_cnt = line.count('"')
-                if quote_cnt % 2 == 0:  # even number of quotes - not inside a string
-                    line = line.split("//", 1)[0] + "\n"
-            cleaned_lines.append(line)
-
-        json_data = json.loads("".join(cleaned_lines))
-    except Exception:
-        return _scan_file_for_urls(settings_path, source_name="VS Code")
-
-    # Preferred dedicated key
-    url = None
-    for key in (
-        "claude.mcp.endpoint",
-        "claude.mcp.url",
-        "anthropic.mcp.endpoint",
-    ):
-        if key in json_data and isinstance(json_data[key], str):
-            url = json_data[key]
-            break
-
-    servers: List[Dict[str, str]] = []
-    if url:
-        servers.append({"name": "VS Code", "url": url})
-
-    # Fallback - any other URLs in the file
-    if not servers:
-        for detected in _extract_urls_from_json(json_data):
-            servers.append({"name": detected, "url": detected})
-
-    return servers
-
-
-def get_mcp_servers_from_cursor(mcp_json_path: str) -> List[Dict[str, str]]:
-    """Read *Cursor*'s ``~/.cursor/mcp.json`` file.
-
-    Cursor stores a very simple JSON structure (see below)::
-
-        {
-            "servers": [
-                {"name": "Production", "url": "https://mcp.cursor.so/sse"}
-            ]
-        }
-    """
-
-    if not os.path.exists(mcp_json_path):
-        return []
-
-    try:
-        with open(mcp_json_path, "r", encoding="utf-8") as fp:
-            data = json.load(fp)
-    except Exception:
-        return _scan_file_for_urls(mcp_json_path, source_name="Cursor")
-
-    servers: List[Dict[str, str]] = []
-    if isinstance(data, dict) and isinstance(data.get("servers"), list):
-        for entry in data["servers"]:
-            if not isinstance(entry, dict):
-                continue
-            url = entry.get("url")
-            if url:
-                servers.append({"name": entry.get("name", url), "url": url})
-
-    if not servers:
-        for url in _extract_urls_from_json(data):
-            servers.append({"name": url, "url": url})
-
-    return servers
+    return []
 
 
 def get_mcp_servers_from_windsurf(mcp_json_path: str) -> List[Dict[str, str]]:
-    """Parse Windsurf's ``mcp_config.json`` file (part of *Codeium*).
-
-    The file layout is identical to Cursor - we therefore reuse the same logic.
-    """
+    """Parse Windsurf's ``mcp_config.json`` file (part of *Codeium*) for MCP Servers."""
 
     if not os.path.exists(mcp_json_path):
         return []
 
-    try:
-        with open(mcp_json_path, "r", encoding="utf-8") as fp:
-            data = json.load(fp)
-    except Exception:
-        return _scan_file_for_urls(mcp_json_path, source_name="Windsurf")
-
-    servers: List[Dict[str, str]] = []
-    if isinstance(data, dict) and isinstance(data.get("servers"), list):
-        for entry in data["servers"]:
-            if not isinstance(entry, dict):
-                continue
-            url = entry.get("url")
-            if url:
-                servers.append({"name": entry.get("name", url), "url": url})
-
-    if not servers:
-        for url in _extract_urls_from_json(data):
-            servers.append({"name": url, "url": url})
-
-    return servers
-
-
-# ---------------------------------------------------------------------------
-# Public interface
-# ---------------------------------------------------------------------------
-
-
-def _scan_file_for_urls(path: str, source_name: str | None = None):
-    """Return a very *best-effort* list of servers found via pure regex search.
-
-    The function is intentionally **permissive** - if we accidentally pick up a
-    non-MCP URL it can still easily be ignored or removed by the user, whereas
-    silently missing a valid endpoint would be far more annoying.
-    """
-
-    try:
-        with open(path, "r", encoding="utf-8", errors="ignore") as fp:
-            content = fp.read()
-    except IOError:
-        return []
-
-    servers = []
-    for match in _URL_RE.findall(content):
-        servers.append({"name": source_name or match, "url": match})
-
-    return servers
+    return []
 
 
 def get_mcp_servers(mcp_server_sources_file: str) -> List[Server]:
@@ -281,5 +187,13 @@ def get_mcp_servers(mcp_server_sources_file: str) -> List[Server]:
                     claude_desktop_path
                 )
                 all_servers += claude_mcp_servers
+
+        elif source_id == "cursor":
+            cursor_path = server_source.get("path", None)
+            if not cursor_path:
+                print("Warning: Missing path for cursor source.")
+            else:
+                cursor_mcp_servers = get_mcp_servers_from_cursor(cursor_path)
+                all_servers += cursor_mcp_servers
 
     return all_servers
