@@ -4,7 +4,7 @@ import sys
 
 from PySide6.QtWidgets import QApplication
 
-from constants import MCP_SERVER_SOURCES_FILE_NAME
+from constants import MCP_SERVER_SOURCES_FILE_NAME, SYSTEM_DEFAULTS_FILE_NAME
 from ui.main_window import MCPServerManager
 
 
@@ -31,7 +31,7 @@ def system_initiation_check():
 
     # read system defaults
     system_defaults = None
-    with open("./system_defaults.json", "r") as file:
+    with open(SYSTEM_DEFAULTS_FILE_NAME, "r") as file:
         system_defaults = json.load(file)
         print("System defaults loaded successfully.")
 
